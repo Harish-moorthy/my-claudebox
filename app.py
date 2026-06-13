@@ -20,7 +20,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🏛️ KNOWLEDGE TERMINAL")
-st.caption("Cloud Matrix System // Optimized Native Engine")
+st.caption("Cloud Matrix System // Powered by Gemini 2.5 Flash Engine")
 
 # Fetch the API Key securely from Streamlit Settings Secrets
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
@@ -102,17 +102,18 @@ if user_query:
                     f"User Query: {user_query}"
                 )
                 
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                # Updated Model String endpoint setup to handle modern production endpoints
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
                 payload = {"contents": [{"parts": [{"text": prompt}]}]}
                 response = requests.post(url, json=payload)
                 
                 if response.status_code == 200:
                     ai_output = response.json()['contents'][0]['parts'][0]['text']
                 else:
-                    ai_output = f"API Communication Error: Code {response.status_code}. Verify your key structures."
+                    ai_output = f"API Communication Error: Code {response.status_code}. Server route rejected."
             else:
                 # Fallback to direct, standard Gemini intelligence if no document is uploaded yet
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
                 payload = {"contents": [{"parts": [{"text": user_query}]}]}
                 response = requests.post(url, json=payload)
                 if response.status_code == 200:

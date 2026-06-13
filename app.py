@@ -20,7 +20,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🏛️ KNOWLEDGE TERMINAL")
-st.caption("Cloud Matrix System // Powered by Gemini 2.5 Flash Engine")
+st.caption("Cloud Matrix System // Powered by Gemini 2.5 Engine")
 
 # Fetch the API Key securely from Streamlit Settings Secrets
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
@@ -49,16 +49,19 @@ with st.sidebar:
                 st.error("Missing API Key. Please add your GEMINI_API_KEY to your Streamlit App Secrets.")
             else:
                 with st.spinner("Processing text coordinates..."):
-                    # Load and segment the PDF directly into clean text blocks
-                    loader = PyPDFLoader("temp_knowledge.pdf")
-                    docs = loader.load()
-                    
-                    text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=300)
-                    final_chunks = text_splitter.split_documents(docs)
-                    
-                    # Store text blocks into regular memory strings
-                    st.session_state.document_chunks = [doc.page_content for doc in final_chunks]
-                    st.success("INDEXING COMPLETE. Data node activated.")
+                    try:
+                        # Load and segment the PDF directly into clean text blocks
+                        loader = PyPDFLoader("temp_knowledge.pdf")
+                        docs = loader.load()
+                        
+                        text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=300)
+                        final_chunks = text_splitter.split_documents(docs)
+                        
+                        # Store text blocks into regular memory strings
+                        st.session_state.document_chunks = [doc.page_content for doc in final_chunks]
+                        st.success("INDEXING COMPLETE. Data node activated.")
+                    except Exception as e:
+                        st.error(f"Failed to read PDF: {str(e)}")
 
 # =====================================================================
 # MAIN WORKSPACE: CONTEXT-AWARE CONVERSATION LOOPS
@@ -79,47 +82,59 @@ if user_query:
         with st.spinner("Querying knowledge vectors..."):
             if not GEMINI_API_KEY:
                 ai_output = "System Lock: Please configure your GEMINI_API_KEY inside the cloud dashboard secrets panel to activate the operational layers."
-            elif st.session_state.document_chunks is not None:
-                # Scan chunks matching the user query words natively
-                query_words = set(user_query.lower().split())
-                matched_chunks = []
-                
-                for chunk in st.session_state.document_chunks:
-                    score = sum(1 for word in query_words if word in chunk.lower())
-                    if score > 0:
-                        matched_chunks.append((score, chunk))
-                
-                # Sort to pass the best matched context pieces first
-                matched_chunks.sort(key=lambda x: x[0], reverse=True)
-                context_payload = "\n\n".join([item[1] for item in matched_chunks[:4]])
-                
-                # Structural Context-Aware System Prompt
-                prompt = (
-                    f"You are a sophisticated Knowledge Intelligence Agent.\n"
-                    f"Analyze the following context pieces thoroughly and answer the user query clearly.\n"
-                    f"If the answer cannot be found in the context matrix, state so directly.\n\n"
-                    f"Context Matrix:\n{context_payload}\n\n"
-                    f"User Query: {user_query}"
-                )
-                
-                # Updated Model String endpoint setup to handle modern production endpoints
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
-                payload = {"contents": [{"parts": [{"text": prompt}]}]}
-                response = requests.post(url, json=payload)
-                
-                if response.status_code == 200:
-                    ai_output = response.json()['contents'][0]['parts'][0]['text']
-                else:
-                    ai_output = f"API Communication Error: Code {response.status_code}. Server route rejected."
             else:
-                # Fallback to direct, standard Gemini intelligence if no document is uploaded yet
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
-                payload = {"contents": [{"parts": [{"text": user_query}]}]}
-                response = requests.post(url, json=payload)
-                if response.status_code == 200:
-                    ai_output = response.json()['contents'][0]['parts'][0]['text']
+                # 1. Build the prompt text based on whether a document is indexed
+                if st.session_state.document_chunks is not None:
+                    query_words = set(user_query.lower().split())
+                    matched_chunks = []
+                    
+                    for chunk in st.session_state.document_chunks:
+                        score = sum(1 for word in query_words if word in chunk.lower())
+                        if score > 0:
+                            matched_chunks.append((score, chunk))
+                    
+                    matched_chunks.sort(key=lambda x: x[0], reverse=True)
+                    context_payload = "\n\n".join([item[1] for item in matched_chunks[:4]])
+                    
+                    prompt_text = (
+                        f"You are a sophisticated Knowledge Intelligence Agent.\n"
+                        f"Analyze the following context pieces thoroughly and answer the user query clearly.\n"
+                        f"If the answer cannot be found in the context matrix, state so directly.\n\n"
+                        f"Context Matrix:\n{context_payload}\n\n"
+                        f"User Query: {user_query}"
+                    )
                 else:
-                    ai_output = "Hello! Upload a PDF document in the sidebar, click index, and I will instantly analyze its contents for you."
+                    prompt_text = user_query
+
+                # 2. Call the active API with a strict production JSON structure
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+                payload = {
+                    "contents": [{
+                        "parts": [{
+                            "text": prompt_text
+                        }]
+                    }]
+                }
+                
+                try:
+                    response = requests.post(url, json=payload)
+                    res_json = response.json()
+                    
+                    if response.status_code == 200:
+                        # Safety check for unexpected or blocked content structures
+                        if 'candidates' in res_json and len(res_json['candidates']) > 0:
+                            ai_output = res_json['candidates'][0]['content']['parts'][0]['text']
+                        elif 'contents' in res_json:
+                            ai_output = res_json['contents'][0]['parts'][0]['text']
+                        else:
+                            ai_output = "API Response format unexpected. Check log structure."
+                    else:
+                        # Safely display the exact server rejection details without crashing
+                        error_msg = res_json.get('error', {}).get('message', 'Unknown Error')
+                        ai_output = f"API Error {response.status_code}: {error_msg}"
+                        
+                except Exception as e:
+                    ai_output = f"System Processing Exception: {str(e)}"
 
             st.markdown(ai_output)
             st.session_state.chat_history.append({"role": "assistant", "content": ai_output})

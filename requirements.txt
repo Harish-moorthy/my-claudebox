@@ -1,6 +1,4 @@
 streamlit
 langchain
-langchain-community
-chromadb
 pypdf
 requests
